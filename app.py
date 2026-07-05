@@ -30,6 +30,13 @@ st.caption("Vision-Based Semantic Segmentation & Proximity Alert System")
 sidebar = st.sidebar
 sidebar.markdown("### System Dashboard")
 sys_info = sidebar.empty()
+sys_info.markdown("""
+<div class="sidebar-info">
+<strong>Pipeline</strong><br>
+Model: SegFormer B0<br>
+Dataset: Cityscapes
+</div>
+""", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload dashcam video (MP4)", type=["mp4"], label_visibility="collapsed")
 
@@ -70,16 +77,15 @@ sys_info.markdown(f"""
 <hr style="margin:8px 0;border-color:#2a2d3e">
 <strong>Pipeline</strong><br>
 Model: SegFormer B0<br>
-Skip: every {FRAME_SKIP}th frame<br>
-Inference: CPU
+Dataset: Cityscapes
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("---")
-st.info(f"**Phase 1** — Pre-processing (every {FRAME_SKIP}th frame of {total_frames})...")
-pre_bar = st.progress(0)
+bar = st.progress(0, text="Processing video...")
 
 annotated_frames = []
+orig_frames = []
 logs = []
 frame_idx = 0
 
@@ -94,14 +100,13 @@ while True:
         telemetry["frame"] = frame_idx
         logs.append(telemetry)
         annotated_frames.append(annotated)
+        orig_frames.append(frame)
 
     frame_idx += 1
-    pre_bar.progress(frame_idx / total_frames)
+    bar.progress(frame_idx / total_frames)
 
 cap.release()
-
-pre_bar.empty()
-st.success(f"Pre-processing complete — {len(annotated_frames)} inference runs.")
+bar.empty()
 
 play_cap = cv2.VideoCapture(video_path)
 
@@ -115,8 +120,6 @@ proc_placeholder = stream_col2.empty()
 
 st.markdown("---")
 st.subheader("Telematics Log")
-log_header = st.empty()
-log_container = st.container()
 log_placeholder = st.empty()
 
 play_bar = st.progress(0)
@@ -150,11 +153,10 @@ for current_frame in range(total_frames):
 <hr style="margin:8px 0;border-color:#2a2d3e">
 <strong>Pipeline</strong><br>
 Model: SegFormer B0<br>
-Skip: every {FRAME_SKIP}th frame<br>
-Inference: CPU
+Dataset: Cityscapes
 <hr style="margin:8px 0;border-color:#2a2d3e">
 <strong>Live</strong><br>
-Frame: {current_frame}/{total_frames}<br>
+Frame: {current_frame} / {total_frames}<br>
 Runtime: {runtime:.1f}s / {duration:.0f}s
 </div>
 """, unsafe_allow_html=True)
@@ -177,7 +179,6 @@ Runtime: {runtime:.1f}s / {duration:.0f}s
                 <span style="color:#888">| Frame {l['frame']} | {l['timestamp']}</span><br>
                 <span style="color:#888">V:{l['vehicle_count']} P:{l['pedestrian_count']} R:{l['road_pct']}%</span>
             </div>"""
-
     log_placeholder.markdown(log_html, unsafe_allow_html=True)
 
     play_bar.progress((current_frame + 1) / total_frames)
@@ -194,16 +195,16 @@ except PermissionError:
     pass
 
 play_bar.empty()
-st.success("Playback complete.")
 
-hazard_count = sum(1 for l in logs if l["hazard_detected"])
-max_occ = max((l["warning_zone_occupancy"] for l in logs), default=0)
 st.markdown("---")
 st.subheader("Session Summary")
 
+hazard_count = sum(1 for l in logs if l["hazard_detected"])
+max_occ = max((l["warning_zone_occupancy"] for l in logs), default=0)
+
 m1, m2, m3, m4 = st.columns(4)
 m1.markdown(f'<div class="kpi-card"><div class="kpi-value">{total_frames}</div><div class="kpi-label">Total Frames</div></div>', unsafe_allow_html=True)
-m2.markdown(f'<div class="kpi-card"><div class="kpi-value">{len(logs)}</div><div class="kpi-label">Inference Runs</div></div>', unsafe_allow_html=True)
+m2.markdown(f'<div class="kpi-card"><div class="kpi-value">{num_processed}</div><div class="kpi-label">Inference Runs</div></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="kpi-card"><div class="kpi-value" style="color:{"#ff4444" if hazard_count else "#00cc88"}">{hazard_count}</div><div class="kpi-label">Hazards Detected</div></div>', unsafe_allow_html=True)
 m4.markdown(f'<div class="kpi-card"><div class="kpi-value">{max_occ}%</div><div class="kpi-label">Max Zone Occupancy</div></div>', unsafe_allow_html=True)
 

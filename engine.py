@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+import time as _time
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 from typing import Dict, Tuple
 
@@ -32,8 +33,10 @@ class ADASPipeline:
 
         inputs = self.processor(images=rgb, return_tensors="pt").to(self.device)
 
+        inf_start = _time.perf_counter()
         with torch.no_grad():
             outputs = self.model(**inputs)
+        inf_ms = round((_time.perf_counter() - inf_start) * 1000, 1)
 
         logits = outputs.logits
         upsampled = F.interpolate(logits, size=(orig_h, orig_w), mode="bilinear", align_corners=False)
@@ -89,6 +92,7 @@ class ADASPipeline:
             "vehicle_count": vehicle_count,
             "pedestrian_count": pedestrian_count,
             "warning_zone_occupancy": round(max(vehicle_occ, danger_occ), 1),
+            "inference_ms": inf_ms,
         }
 
         return annotated, telemetry
@@ -129,7 +133,8 @@ class ADASPipeline:
         cv2.putText(hud, timestamp, (int(w * 0.22), 22), font, fs, (200, 200, 200), thickness, cv2.LINE_AA)
         cv2.putText(hud, status_text, (w - 280, 22), font, fs, status_color, thickness, cv2.LINE_AA)
 
-        obj_text = f"V:{vehicles}  P:{peds}  R:{road_pct}%"
+        inf_ms = telemetry.get("inference_ms", 0)
+        obj_text = f"V:{vehicles}  P:{peds}  R:{road_pct}%  inf:{inf_ms}ms"
         cv2.putText(hud, obj_text, (12, h - 10), font, fs, (180, 180, 180), thickness, cv2.LINE_AA)
 
         if hazard:
